@@ -1,0 +1,4 @@
+anthropic==1.14.0
+fpdf2==2.8.9
+pdfplumber==0.11.10
+python-dotenv==1.2.4
