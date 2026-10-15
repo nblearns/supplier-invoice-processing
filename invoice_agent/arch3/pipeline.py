@@ -18,12 +18,12 @@ from invoice_agent.arch1.validator import validate, ValidationError
 from invoice_agent.arch1.erp_adapter import post
 
 
-def run(pdf_path: Path) -> dict:
+def run(pdf_path: Path, verbose: bool = False) -> dict:
   pdf_path = Path(pdf_path)
   invoice_no = pdf_path.stem
 
   try:
-    data       = agent_run(pdf_path)
+    data       = agent_run(pdf_path, verbose=verbose)
     invoice_no = data.get("invoice_no") or pdf_path.stem
     validated  = validate(data)
     result     = post(validated)
@@ -44,11 +44,15 @@ def run(pdf_path: Path) -> dict:
 
 if __name__ == "__main__":
   load_dotenv()
-  if len(sys.argv) != 2:
-    print("Usage: py -m invoice_agent.arch3.pipeline <path-to-pdf>")
+  args = sys.argv[1:]
+  verbose = "--verbose" in args
+  paths = [a for a in args if not a.startswith("--")]
+
+  if len(paths) != 1:
+    print("Usage: py -m invoice_agent.arch3.pipeline <path-to-pdf> [--verbose]")
     sys.exit(1)
 
-  outcome = run(Path(sys.argv[1]))
+  outcome = run(Path(paths[0]), verbose=verbose)
 
   if outcome["status"] == "ok":
     print(f"[OK]    {outcome['invoice_no']}  ->  {outcome['erp_reference']}")

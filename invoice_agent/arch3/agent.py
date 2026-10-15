@@ -30,6 +30,8 @@ class AgentError(Exception):
 _SCHEMA = """\
 {
   "vendor_name":   "string — supplier / company name",
+  "vendor_code":   "string or null — internal ERP supplier code; look this up \
+with lookup_supplier_code() if not printed on the invoice",
   "invoice_no":    "string — invoice identifier",
   "date":          "string — invoice date as it appears",
   "due_date":      "string or null",
@@ -53,17 +55,20 @@ _SYSTEM_PROMPT = f"""\
 You are an invoice extraction agent. Your job is to extract all fields from a PDF invoice \
 and return them as structured JSON.
 
-You have four tools:
-- get_full_text()         — full text of the entire invoice
-- get_page_text(page_no)  — text from one specific page (1-based)
-- get_tables(page_no)     — table data from one specific page as a JSON array
-- finish(invoice)         — call this once you have all fields; it ends the session
+You have five tools:
+- get_full_text()                  — full text of the entire invoice
+- get_page_text(page_no)           — text from one specific page (1-based)
+- get_tables(page_no)              — table data from one specific page as a JSON array
+- lookup_supplier_code(supplier_name) — look up the internal ERP supplier code by name
+- finish(invoice)                  — call this once you have all fields; it ends the session
 
 Suggested strategy:
 1. Call get_full_text() first to see the whole invoice.
 2. If a field is ambiguous or missing, call get_page_text() or get_tables() on the \
 relevant page to look more carefully.
-3. Once you are confident you have every required field, call finish() with the complete \
+3. If the invoice shows a supplier name but no supplier code, call \
+lookup_supplier_code() to retrieve it from the ERP register.
+4. Once you are confident you have every required field, call finish() with the complete \
 invoice JSON.
 
 Required schema for the invoice argument of finish():
@@ -81,7 +86,7 @@ Rules:
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def run(pdf_path: Path) -> dict:
+def run(pdf_path: Path, verbose: bool = False) -> dict:
   """Run the agent loop on a PDF invoice; return the extracted invoice dict."""
   pdf_path = Path(pdf_path)
   context = PdfContext(pdf_path)
@@ -122,7 +127,13 @@ def run(pdf_path: Path) -> dict:
     for block in response.content:
       if block.type != "tool_use":
         continue
+      if verbose:
+        args = ", ".join(f"{k}={v!r}" for k, v in block.input.items()
+                         if k != "invoice")
+        print(f"  [iter {iteration}] tool: {block.name}({args})")
       result = dispatch(block.name, block.input, context)
+      if verbose and block.name == "lookup_supplier_code":
+        print(f"           -> {result}")
       tool_results.append({
         "type":        "tool_result",
         "tool_use_id": block.id,

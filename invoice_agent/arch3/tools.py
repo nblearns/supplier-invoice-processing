@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pdfplumber
 
+from invoice_agent.arch3.supplier_db import lookup as _supplier_lookup
+
 
 # ── Tool definitions (passed to Anthropic API) ────────────────────────────────
 
@@ -56,6 +58,23 @@ TOOL_DEFINITIONS = [
         }
       },
       "required": ["page_no"],
+    },
+  },
+  {
+    "name": "lookup_supplier_code",
+    "description": (
+      "Look up the internal ERP supplier code for a given supplier name. "
+      "Use this when the invoice shows a supplier name but no supplier code."
+    ),
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "supplier_name": {
+          "type": "string",
+          "description": "The supplier company name as it appears on the invoice.",
+        }
+      },
+      "required": ["supplier_name"],
     },
   },
   {
@@ -134,6 +153,11 @@ def dispatch(name: str, tool_input: dict, context: PdfContext) -> str:
     return context.get_page_text(tool_input["page_no"])
   if name == "get_tables":
     return context.get_tables(tool_input["page_no"])
+  if name == "lookup_supplier_code":
+    code = _supplier_lookup(tool_input["supplier_name"])
+    if code is None:
+      return f"No supplier code found for '{tool_input['supplier_name']}'"
+    return code
   if name == "finish":
     return "acknowledged"
   return f"Error: unknown tool '{name}'"
